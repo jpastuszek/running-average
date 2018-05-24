@@ -85,13 +85,13 @@ pub struct RunningAverage<TS: TimeSource, V: Default> {
     time_source: TS,
 }
 
-impl RunningAverage<RealTimeSource, u64> {
-    pub fn new(duration: Duration, capacity: usize) -> RunningAverage<RealTimeSource, u64> {
+impl<V: Default> RunningAverage<RealTimeSource, V> {
+    pub fn new(duration: Duration, capacity: usize) -> RunningAverage<RealTimeSource, V> {
         RunningAverage::with_time_source(duration, capacity, RealTimeSource)
     }
 }
 
-impl<TS: TimeSource, V: AddAssign<V> + Default> RunningAverage<TS, V> {
+impl<TS: TimeSource, V: Default> RunningAverage<TS, V> {
     pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RunningAverage<TS, V> {
         RunningAverage {
             window: (0..capacity).map(|_| V::default()).collect(),
