@@ -121,7 +121,7 @@ impl<TS: TimeSource> RunningAverage<TS> {
     pub fn measure(&mut self) -> f64 {
         self.shift();
         self.window.iter().fold(0f64, |ret, val| {
-            ret + *val as f64 / self.slot_duration() / self.window.len() as f64
+            ret + *val as f64 / self.duration as f64
         })
     }
 
