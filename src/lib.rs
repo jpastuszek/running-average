@@ -104,13 +104,14 @@ impl<TS: TimeSource> RunningAverage<TS> {
     
     fn shift(&mut self) {
         let now = self.time_source.now();
-        let shift_slots = (now.duration_since(self.front) / self.slot_duration()).floor() as usize;
-        for _ in 0..shift_slots {
+        let slot_duration = self.slot_duration();
+
+        // TODO: stop if we zeroed all slots
+        while now.duration_since(self.front) + slot_duration >= 0f64  {
             self.window.pop_back();
             self.window.push_front(0);
+            self.front.forward(slot_duration);
         }
-        let shift_slots_duration = shift_slots as f64 * self.slot_duration();
-        self.front.forward(shift_slots_duration);
     }
     
     pub fn insert(&mut self, val: u64) {
