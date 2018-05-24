@@ -115,11 +115,18 @@ impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
         let now = self.time_source.now();
         let slot_duration = self.duration / self.window.len() as u32;
 
-        // TODO: stop if we zeroed all slots or this can loop for long time if shift was not recently
+        let mut slots_to_go = self.window.len();
         while now.duration_since(self.front) >= slot_duration {
+            // Stop if we zeroed all slots or this can loop for long time if shift was not called recently
+            if slots_to_go == 0 {
+                let since_front = now.duration_since(self.front);
+                self.front.forward(since_front);
+                break;
+            }
             self.window.pop_back();
             self.window.push_front(V::default());
             self.front.forward(slot_duration);
+            slots_to_go -= 1;
         }
     }
     
@@ -178,7 +185,7 @@ mod tests {
             tw.insert(10);
 
             assert_eq!(tw.measure(), 40, "for capacity {}: {:?}", capacity, tw);
-            //assert_eq!(tw.measure_per_second(), 10.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure_per_second(), 10.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -196,6 +203,7 @@ mod tests {
             tw.time_source().time_shift(1.0);
 
             assert_eq!(tw.measure(), 20, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure_per_second(), 5.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -211,6 +219,26 @@ mod tests {
         // Note: this may fail as it is based on real time
         assert_eq!(tw.measure(), 20, "default: {:?}", tw);
         assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
+    }
+
+    #[test]
+    fn long_time_shift() {
+        use super::*;
+
+        let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), 16, ManualTimeSource::new());
+
+        tw.insert(10);
+        tw.time_source().time_shift(1_000_000_000.0);
+        tw.insert(10);
+        tw.time_source().time_shift(1.0);
+        tw.insert(10);
+        tw.time_source().time_shift(1.0);
+        tw.insert(10);
+        tw.time_source().time_shift(1.0);
+        tw.insert(10);
+
+        assert_eq!(tw.measure(), 40, "long: {:?}", tw);
+        assert_eq!(tw.measure_per_second(), 10.0, "long: {:?}", tw);
     }
 
     #[test]
