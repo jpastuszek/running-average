@@ -78,7 +78,7 @@ impl ManualTimeSource {
 }
 
 #[derive(Debug)]
-pub struct RunningAverage<TS: TimeSource, V: AddAssign<V> + Default> {
+pub struct RunningAverage<TS: TimeSource, V: Default> {
     window: VecDeque<V>,
     front: TS::Instant,
     duration: Duration,
@@ -113,7 +113,7 @@ impl<TS: TimeSource, V: AddAssign<V> + Default> RunningAverage<TS, V> {
         }
     }
     
-    pub fn insert(&mut self, val: V) {
+    pub fn insert(&mut self, val: V) where V: AddAssign<V> {
         self.shift();
         *self.window.front_mut().unwrap() += val;
     }
