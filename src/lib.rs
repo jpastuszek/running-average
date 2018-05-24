@@ -222,6 +222,20 @@ mod tests {
     }
 
     #[test]
+    fn default_f64() {
+        use super::*;
+
+        let mut tw = RunningAverage::default();
+
+        tw.insert(10f64);
+        tw.insert(10.0);
+
+        // Note: this may fail as it is based on real time
+        assert_eq!(tw.measure(), 20.0, "default: {:?}", tw);
+        assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
+    }
+
+    #[test]
     fn long_time_shift() {
         use super::*;
 
@@ -239,19 +253,5 @@ mod tests {
 
         assert_eq!(tw.measure(), 40, "long: {:?}", tw);
         assert_eq!(tw.measure_per_second(), 10.0, "long: {:?}", tw);
-    }
-
-    #[test]
-    fn default_f64() {
-        use super::*;
-
-        let mut tw = RunningAverage::default();
-
-        tw.insert(10f64);
-        tw.insert(10.0);
-
-        // Note: this may fail as it is based on real time
-        assert_eq!(tw.measure(), 20.0, "default: {:?}", tw);
-        assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
     }
 }
