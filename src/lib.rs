@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::time::{Instant, Duration};
 
 pub trait TimeInstant {
-    fn duration_since(&self, since: Self) -> f64;
-    fn forward(&mut self, seconds: f64);
+    fn duration_since(&self, since: Self) -> Duration;
+    fn forward(&mut self, duration: Duration);
 }
 
 pub trait TimeSource {
@@ -11,21 +11,13 @@ pub trait TimeSource {
     fn now(&self) -> Self::Instant;
 }
 
-fn dts(duration: Duration) -> f64 {
-    duration.as_secs() as f64 + duration.subsec_nanos() as f64 * 1e-9
-}
-
-fn std(seconds: f64) -> Duration {
-    Duration::new(seconds.floor() as u64, ((seconds - seconds.floor()) * 1e-9) as u32)
-}
-
 impl TimeInstant for Instant {
-    fn duration_since(&self, earlier: Self) -> f64 {
-        dts(self.duration_since(earlier))
+    fn duration_since(&self, earlier: Self) -> Duration {
+        self.duration_since(earlier)
     }
 
-    fn forward(&mut self, seconds: f64) {
-        *self += std(seconds);
+    fn forward(&mut self, duration: Duration) {
+        *self += duration;
     }
 }
 
@@ -39,13 +31,21 @@ impl TimeSource for RealTimeSource {
     }
 }
 
+fn dts(duration: Duration) -> f64 {
+    duration.as_secs() as f64 + duration.subsec_nanos() as f64 * 1e-9
+}
+
+fn std(seconds: f64) -> Duration {
+    Duration::new(seconds.floor() as u64, ((seconds - seconds.floor()) * 1e-9) as u32)
+}
+
 impl TimeInstant for f64 {
-    fn duration_since(&self, earlier: Self) -> f64 {
-        self - earlier
+    fn duration_since(&self, earlier: Self) -> Duration {
+        std(self - earlier)
     }
 
-    fn forward(&mut self, seconds: f64) {
-        *self += seconds;
+    fn forward(&mut self, duration: Duration) {
+        *self += dts(duration);
     }
 }
 
@@ -78,7 +78,7 @@ impl ManualTimeSource {
 pub struct RunningAverage<TS: TimeSource> {
     window: VecDeque<u64>,
     front: TS::Instant,
-    duration: f64,
+    duration: Duration,
     time_source: TS,
 }
 
@@ -93,21 +93,17 @@ impl<TS: TimeSource> RunningAverage<TS> {
         RunningAverage {
             window: (0..capacity).map(|_| 0).collect(),
             front: time_source.now(),
-            duration: dts(duration),
+            duration: duration,
             time_source,
         }
-    }
-
-    fn slot_duration(&self) -> f64 {
-        self.duration / self.window.len() as f64
     }
     
     fn shift(&mut self) {
         let now = self.time_source.now();
-        let slot_duration = self.slot_duration();
+        let slot_duration = self.duration / self.window.len() as u32;
 
-        // TODO: stop if we zeroed all slots
-        while now.duration_since(self.front) + slot_duration >= 0f64  {
+        // TODO: stop if we zeroed all slots or this can loop for long time if shift was not recently
+        while now.duration_since(self.front) >= slot_duration {
             self.window.pop_back();
             self.window.push_front(0);
             self.front.forward(slot_duration);
@@ -149,7 +145,7 @@ mod tests {
             tw.time_source().time_shift(1.0);
             tw.insert(10);
 
-            assert_eq!(tw.measure() as f64 / 4.0, 10.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure(), 40, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -166,7 +162,22 @@ mod tests {
             tw.time_source().time_shift(1.0);
             tw.time_source().time_shift(1.0);
 
-            assert_eq!(tw.measure() as f64 / 4.0, 5.0, "for capacity {}: {:?}", capacity, tw); //TODO: don't eq floats
+            assert_eq!(tw.measure(), 20, "for capacity {}: {:?}", capacity, tw);
+        }
+    }
+
+    #[test]
+    fn const_half_time_over_different_capacity_real_time() {
+        use super::*;
+
+        for capacity in 1..31 {
+            let mut tw = RunningAverage::<RealTimeSource>::new(Duration::from_secs(4), capacity);
+
+            tw.insert(10);
+            tw.insert(10);
+
+            // TODO: this may fail?
+            assert_eq!(tw.measure(), 20, "for capacity {}: {:?}", capacity, tw);
         }
     }
 }
