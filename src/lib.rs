@@ -78,21 +78,31 @@ impl ManualTimeSource {
 }
 
 #[derive(Debug)]
-pub struct RunningAverage<TS: TimeSource, V: Default> {
+pub struct RunningAverage<V: Default, TS: TimeSource = RealTimeSource> {
     window: VecDeque<V>,
     front: TS::Instant,
     duration: Duration,
     time_source: TS,
 }
 
-impl<V: Default> RunningAverage<RealTimeSource, V> {
-    pub fn new(duration: Duration, capacity: usize) -> RunningAverage<RealTimeSource, V> {
+impl<V: Default> RunningAverage<V, RealTimeSource> {
+    pub fn new(duration: Duration) -> RunningAverage<V, RealTimeSource> {
+        RunningAverage::with_capacity(duration, 16)
+    }
+
+    pub fn with_capacity(duration: Duration, capacity: usize) -> RunningAverage<V, RealTimeSource> {
         RunningAverage::with_time_source(duration, capacity, RealTimeSource)
     }
 }
 
-impl<TS: TimeSource, V: Default> RunningAverage<TS, V> {
-    pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RunningAverage<TS, V> {
+impl<V: Default> Default for RunningAverage<V, RealTimeSource> {
+    fn default() -> RunningAverage<V, RealTimeSource> {
+        RunningAverage::new(Duration::from_secs(8))
+    }
+}
+
+impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
+    pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RunningAverage<V, TS> {
         RunningAverage {
             window: (0..capacity).map(|_| V::default()).collect(),
             front: time_source.now(),
@@ -174,17 +184,15 @@ mod tests {
     }
 
     #[test]
-    fn const_half_time_over_different_capacity_real_time() {
+    fn default() {
         use super::*;
 
-        for capacity in 1..31 {
-            let mut tw = RunningAverage::<RealTimeSource, u64>::new(Duration::from_secs(4), capacity);
+        let mut tw = RunningAverage::default();
 
-            tw.insert(10);
-            tw.insert(10);
+        tw.insert(10);
+        tw.insert(10);
 
-            // TODO: this may fail?
-            assert_eq!(tw.measure(), 20, "for capacity {}: {:?}", capacity, tw);
-        }
+        // Note: this may fail as it is based on real time
+        assert_eq!(tw.measure(), 20, "default: {:?}", tw);
     }
 }
