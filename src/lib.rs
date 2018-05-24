@@ -134,13 +134,27 @@ impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
         self.window.iter().sum()
     }
 
-    pub fn measure_per_second<'i>(&'i mut self) -> f64 where V: Sum<&'i V> + Into<f64> {
-        let ds = dts(self.duration);
-        self.measure().into() / ds
+    pub fn measure_per_second<'i>(&'i mut self) -> <V as ToRate>::Output where V: Sum<&'i V> + ToRate {
+        let ds = self.duration;
+        self.measure().to_rate(ds)
     }
 
     pub fn time_source(&mut self) -> &mut TS {
         &mut self.time_source
+    }
+}
+
+pub trait ToRate {
+    type Output;
+    fn to_rate(self, duration: Duration) -> Self::Output;
+}
+
+impl<T: Into<f64>> ToRate for T {
+    type Output = f64;
+
+    fn to_rate(self, duration: Duration) -> f64 {
+        let v: f64 = self.into();
+        v / dts(duration)
     }
 }
 
@@ -184,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn default() {
+    fn default_int() {
         use super::*;
 
         let mut tw = RunningAverage::default();
@@ -194,5 +208,20 @@ mod tests {
 
         // Note: this may fail as it is based on real time
         assert_eq!(tw.measure(), 20, "default: {:?}", tw);
+        assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
+    }
+
+    #[test]
+    fn default_f64() {
+        use super::*;
+
+        let mut tw = RunningAverage::default();
+
+        tw.insert(10f64);
+        tw.insert(10.0);
+
+        // Note: this may fail as it is based on real time
+        assert_eq!(tw.measure(), 20.0, "default: {:?}", tw);
+        assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
     }
 }
