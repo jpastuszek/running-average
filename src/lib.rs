@@ -124,7 +124,10 @@ impl<TS: TimeSource, V: AddAssign<V> + Default> RunningAverage<TS, V> {
         self.window.iter().sum()
     }
 
-    // TODO: mesure per second
+    pub fn measure_per_second<'i>(&'i mut self) -> f64 where V: Sum<&'i V> + Into<f64> {
+        let ds = dts(self.duration);
+        self.measure().into() / ds
+    }
 
     pub fn time_source(&mut self) -> &mut TS {
         &mut self.time_source
@@ -149,6 +152,7 @@ mod tests {
             tw.insert(10);
 
             assert_eq!(tw.measure(), 40, "for capacity {}: {:?}", capacity, tw);
+            //assert_eq!(tw.measure_per_second(), 10.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
