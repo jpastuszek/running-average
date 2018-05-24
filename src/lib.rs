@@ -149,6 +149,8 @@ pub trait ToRate {
     fn to_rate(self, duration: Duration) -> Self::Output;
 }
 
+//Note: This is not implemented for u64 as it cannot be converted precisely to f64 - use f64 instead for big numbers
+//Note: Duration can be converted to f64 but will be rounded to fit in it so it is not 100% precise for max Duration
 impl<T: Into<f64>> ToRate for T {
     type Output = f64;
 
