@@ -119,12 +119,13 @@ impl<TS: TimeSource> RunningAverage<TS> {
         *self.window.front_mut().unwrap() += val;
     }
     
-    pub fn measure(&mut self) -> f64 {
+    /// Sum of window in duration
+    pub fn measure(&mut self) -> u64 {
         self.shift();
-        self.window.iter().fold(0f64, |ret, val| {
-            ret + *val as f64 / self.duration as f64
-        })
+        self.window.iter().sum()
     }
+
+    // TODO: mesure per second
 
     pub fn time_source(&mut self) -> &mut TS {
         &mut self.time_source
@@ -148,7 +149,7 @@ mod tests {
             tw.time_source().time_shift(1.0);
             tw.insert(10);
 
-            assert_eq!(tw.measure(), 10.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure() as f64 / 4.0, 10.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -165,7 +166,7 @@ mod tests {
             tw.time_source().time_shift(1.0);
             tw.time_source().time_shift(1.0);
 
-            assert_eq!(tw.measure(), 5.0, "for capacity {}: {:?}", capacity, tw); //TODO: don't eq floats
+            assert_eq!(tw.measure() as f64 / 4.0, 5.0, "for capacity {}: {:?}", capacity, tw); //TODO: don't eq floats
         }
     }
 }
