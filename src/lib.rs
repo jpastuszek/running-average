@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
 use std::time::{Instant, Duration};
+use std::ops::AddAssign;
+use std::iter::Sum;
+use std::default::Default;
 
 pub trait TimeInstant {
     fn duration_since(&self, since: Self) -> Duration;
@@ -75,23 +78,23 @@ impl ManualTimeSource {
 }
 
 #[derive(Debug)]
-pub struct RunningAverage<TS: TimeSource> {
-    window: VecDeque<u64>,
+pub struct RunningAverage<TS: TimeSource, V: AddAssign<V> + Default> {
+    window: VecDeque<V>,
     front: TS::Instant,
     duration: Duration,
     time_source: TS,
 }
 
-impl RunningAverage<RealTimeSource> {
-    pub fn new(duration: Duration, capacity: usize) -> RunningAverage<RealTimeSource> {
+impl RunningAverage<RealTimeSource, u64> {
+    pub fn new(duration: Duration, capacity: usize) -> RunningAverage<RealTimeSource, u64> {
         RunningAverage::with_time_source(duration, capacity, RealTimeSource)
     }
 }
 
-impl<TS: TimeSource> RunningAverage<TS> {
-    pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RunningAverage<TS> {
+impl<TS: TimeSource, V: AddAssign<V> + Default> RunningAverage<TS, V> {
+    pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RunningAverage<TS, V> {
         RunningAverage {
-            window: (0..capacity).map(|_| 0).collect(),
+            window: (0..capacity).map(|_| V::default()).collect(),
             front: time_source.now(),
             duration: duration,
             time_source,
@@ -105,18 +108,18 @@ impl<TS: TimeSource> RunningAverage<TS> {
         // TODO: stop if we zeroed all slots or this can loop for long time if shift was not recently
         while now.duration_since(self.front) >= slot_duration {
             self.window.pop_back();
-            self.window.push_front(0);
+            self.window.push_front(V::default());
             self.front.forward(slot_duration);
         }
     }
     
-    pub fn insert(&mut self, val: u64) {
+    pub fn insert(&mut self, val: V) {
         self.shift();
         *self.window.front_mut().unwrap() += val;
     }
     
     /// Sum of window in duration
-    pub fn measure(&mut self) -> u64 {
+    pub fn measure<'i>(&'i mut self) -> V where V: Sum<&'i V> {
         self.shift();
         self.window.iter().sum()
     }
@@ -171,7 +174,7 @@ mod tests {
         use super::*;
 
         for capacity in 1..31 {
-            let mut tw = RunningAverage::<RealTimeSource>::new(Duration::from_secs(4), capacity);
+            let mut tw = RunningAverage::<RealTimeSource, u64>::new(Duration::from_secs(4), capacity);
 
             tw.insert(10);
             tw.insert(10);
