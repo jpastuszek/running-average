@@ -39,6 +39,7 @@ fn dts(duration: Duration) -> f64 {
 }
 
 fn std(seconds: f64) -> Duration {
+    assert!(seconds >= 0.0, "RunningAverage negative duration - time going backwards?");
     Duration::new(seconds.floor() as u64, ((seconds - seconds.floor()) * 1e-9) as u32)
 }
 
@@ -115,8 +116,8 @@ pub struct RunningAverage<V: Default, I: TimeInstant + Copy> {
     duration: Duration,
 }
 
-impl<V: Default> Default for RunningAverage<V, Instant> {
-    fn default() -> RunningAverage<V, Instant> {
+impl<V: Default, I: TimeInstant + Copy> Default for RunningAverage<V, I> {
+    fn default() -> RunningAverage<V, I> {
         RunningAverage::new(Duration::from_secs(8))
     }
 }
@@ -154,11 +155,13 @@ impl<V: Default, I: TimeInstant + Copy> RunningAverage<V, I> {
         }
     }
     
+    /// Panics if now is less than previous now - time cannot go backwards
     pub fn insert(&mut self, now: I, val: V) where V: AddAssign<V> {
         self.shift(now);
         *self.window.front_mut().unwrap() += val;
     }
 
+    /// Panics if now is less than previous now - time cannot go backwards
     pub fn measure<'i>(&'i mut self, now: I) -> Measure<V> where V: Sum<&'i V> {
         self.shift(now);
 
