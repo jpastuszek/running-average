@@ -87,7 +87,7 @@ pub struct Measure<T> {
 use std::fmt;
 impl<T> fmt::Display for Measure<T> where T: Clone + fmt::Display + ToRate, <T as ToRate>::Output: Into<f64> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} ({:.2}/s)", self.value(), self.rate().into())
+        write!(f, "{:.3}", self.rate().into())
     }
 }
 
