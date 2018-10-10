@@ -83,6 +83,13 @@ pub struct Measure<T> {
     duration: Duration,
 }
 
+use std::fmt;
+impl<T> fmt::Display for Measure<T> where T: Clone + fmt::Display + ToRate, <T as ToRate>::Output: Into<f64> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} ({:.2}/s)", self.value(), self.rate().into())
+    }
+}
+
 impl<T> Measure<T> {
     pub fn value(&self) -> &T {
         &self.value
@@ -286,5 +293,17 @@ mod tests {
 
         assert_eq!(tw.measure_now().unwrap(), 40, "long: {:?}", tw);
         assert_eq!(tw.measure_now().to_rate(), 10.0, "long: {:?}", tw);
+    }
+
+    #[test]
+    fn measure_display() {
+        use super::*;
+
+        let mut tw = RunningAverage::default();
+
+        tw.insert_now(10);
+        tw.insert_now(10);
+
+        assert_eq!(&format!("{}", tw.measure_now()), "20 (2.50/s)");
     }
 }
