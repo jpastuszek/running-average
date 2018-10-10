@@ -109,43 +109,36 @@ impl<T> Measure<T> {
 }
 
 #[derive(Debug)]
-pub struct RunningAverage<V: Default, TS: TimeSource = RealTimeSource> {
+pub struct RunningAverage<V: Default, I: TimeInstant + Copy> {
     window: VecDeque<V>,
-    front: TS::Instant,
+    front: I,
     duration: Duration,
-    time_source: TS,
 }
 
-impl<V: Default> RunningAverage<V, RealTimeSource> {
-    pub fn new(duration: Duration) -> RunningAverage<V, RealTimeSource> {
-        RunningAverage::with_capacity(duration, 16)
-    }
-
-    pub fn with_capacity(duration: Duration, capacity: usize) -> RunningAverage<V, RealTimeSource> {
-        RunningAverage::with_time_source(duration, capacity, RealTimeSource)
+impl<V: Default> Default for RunningAverage<V, Instant> {
+    fn default() -> RunningAverage<V, Instant> {
+        RunningAverage::new(Instant::now(), Duration::from_secs(8))
     }
 }
 
-impl<V: Default> Default for RunningAverage<V, RealTimeSource> {
-    fn default() -> RunningAverage<V, RealTimeSource> {
-        RunningAverage::new(Duration::from_secs(8))
+impl<V: Default, I: TimeInstant + Copy> RunningAverage<V, I> {
+    pub fn new(now: I, duration: Duration) -> RunningAverage<V, I> {
+        RunningAverage::with_capacity(now, duration, 16)
     }
-}
 
-impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
-    pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RunningAverage<V, TS> {
+    pub fn with_capacity(now: I, duration: Duration, capacity: usize) -> RunningAverage<V, I> {
+        assert!(capacity > 0, "RunningAverage capacity cannot be 0");
         RunningAverage {
             window: (0..capacity).map(|_| V::default()).collect(),
-            front: time_source.now(),
+            front: now,
             duration: duration,
-            time_source,
         }
     }
-    
-    fn shift(&mut self, now: TS::Instant) {
-        let slot_duration = self.duration / self.window.len() as u32;
 
+    fn shift(&mut self, now: I) {
+        let slot_duration = self.duration / self.window.len() as u32;
         let mut slots_to_go = self.window.len();
+
         while now.duration_since(self.front) >= slot_duration {
             // Stop if we zeroed all slots or this can loop for long time if shift was not called recently
             if slots_to_go == 0 {
@@ -160,30 +153,62 @@ impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
         }
     }
     
-    pub fn insert_now(&mut self, val: V) where V: AddAssign<V> {
-        let now = self.time_source.now();
-        self.shift(now);
-        *self.window.front_mut().unwrap() += val;
-    }
-    
-    pub fn insert_at(&mut self, val: V, now: TS::Instant) where V: AddAssign<V> {
+    pub fn insert(&mut self, val: V, now: I) where V: AddAssign<V> {
         self.shift(now);
         *self.window.front_mut().unwrap() += val;
     }
 
-    /// Sum of window in duration
-    pub fn measure_now<'i>(&'i mut self) -> Measure<V> where V: Sum<&'i V> {
-        let now = self.time_source.now();
-        self.measure(now)
-    }
-    
-    pub fn measure<'i>(&'i mut self, now: TS::Instant) -> Measure<V> where V: Sum<&'i V> {
+    pub fn measure<'i>(&'i mut self, now: I) -> Measure<V> where V: Sum<&'i V> {
         self.shift(now);
 
         Measure {
             value: self.window.iter().sum(),
             duration: self.duration,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct RealTimeRunningAverage<V: Default, TS: TimeSource = RealTimeSource> {
+    inner: RunningAverage<V, TS::Instant>,
+    time_source: TS,
+}
+
+impl<V: Default> Default for RealTimeRunningAverage<V, RealTimeSource> {
+    fn default() -> RealTimeRunningAverage<V, RealTimeSource> {
+        RealTimeRunningAverage::new(Duration::from_secs(8))
+    }
+}
+
+impl<V: Default> RealTimeRunningAverage<V, RealTimeSource> {
+    // Note: new() is parametrising output to RealTimeSource as this cannot be inferred from arguments
+    pub fn new(duration: Duration) -> RealTimeRunningAverage<V, RealTimeSource> {
+        let time_source = RealTimeSource;
+
+        RealTimeRunningAverage {
+            inner: RunningAverage::new(time_source.now(), duration),
+            time_source,
+        }
+    }
+}
+
+impl<V: Default, TS: TimeSource> RealTimeRunningAverage<V, TS> {
+    pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RealTimeRunningAverage<V, TS> {
+        RealTimeRunningAverage {
+            inner: RunningAverage::with_capacity(time_source.now(), duration, capacity),
+            time_source,
+        }
+    }
+
+    pub fn insert(&mut self, val: V) where V: AddAssign<V> {
+        let now = self.time_source.now();
+        self.inner.insert(val, now)
+    }
+    
+    /// Sum of window in duration
+    pub fn measure<'i>(&'i mut self) -> Measure<V> where V: Sum<&'i V> {
+        let now = self.time_source.now();
+        self.inner.measure(now)
     }
 
     pub fn time_source(&mut self) -> &mut TS {
@@ -214,18 +239,18 @@ mod tests {
         use super::*;
 
         for capacity in 1..31 {
-            let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), capacity, ManualTimeSource::new());
+            let mut tw = RealTimeRunningAverage::with_time_source(Duration::from_secs(4), capacity, ManualTimeSource::new());
 
-            tw.insert_now(10);
+            tw.insert(10);
             tw.time_source().time_shift(1.0);
-            tw.insert_now(10);
+            tw.insert(10);
             tw.time_source().time_shift(1.0);
-            tw.insert_now(10);
+            tw.insert(10);
             tw.time_source().time_shift(1.0);
-            tw.insert_now(10);
+            tw.insert(10);
 
-            assert_eq!(tw.measure_now().unwrap(), 40, "for capacity {}: {:?}", capacity, tw);
-            assert_eq!(tw.measure_now().to_rate(), 10.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure().unwrap(), 40, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure().to_rate(), 10.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -234,16 +259,16 @@ mod tests {
         use super::*;
 
         for capacity in 1..31 {
-            let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), capacity, ManualTimeSource::new());
+            let mut tw = RealTimeRunningAverage::with_time_source(Duration::from_secs(4), capacity, ManualTimeSource::new());
 
-            tw.insert_now(10);
+            tw.insert(10);
             tw.time_source().time_shift(1.0);
-            tw.insert_now(10);
+            tw.insert(10);
             tw.time_source().time_shift(1.0);
             tw.time_source().time_shift(1.0);
 
-            assert_eq!(tw.measure_now().unwrap(), 20, "for capacity {}: {:?}", capacity, tw);
-            assert_eq!(tw.measure_now().to_rate(), 5.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure().unwrap(), 20, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure().to_rate(), 5.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -251,59 +276,59 @@ mod tests {
     fn default_int() {
         use super::*;
 
-        let mut tw = RunningAverage::default();
+        let mut tw = RealTimeRunningAverage::default();
 
-        tw.insert_now(10);
-        tw.insert_now(10);
+        tw.insert(10);
+        tw.insert(10);
 
         // Note: this may fail as it is based on real time
-        assert_eq!(tw.measure_now().unwrap(), 20, "default: {:?}", tw);
-        assert_eq!(tw.measure_now().to_rate(), 2.5, "default: {:?}", tw);
+        assert_eq!(tw.measure().unwrap(), 20, "default: {:?}", tw);
+        assert_eq!(tw.measure().to_rate(), 2.5, "default: {:?}", tw);
     }
 
     #[test]
     fn default_f64() {
         use super::*;
 
-        let mut tw = RunningAverage::default();
+        let mut tw = RealTimeRunningAverage::default();
 
-        tw.insert_now(10f64);
-        tw.insert_now(10.0);
+        tw.insert(10f64);
+        tw.insert(10.0);
 
         // Note: this may fail as it is based on real time
-        assert_eq!(tw.measure_now().unwrap(), 20.0, "default: {:?}", tw);
-        assert_eq!(tw.measure_now().to_rate(), 2.5, "default: {:?}", tw);
+        assert_eq!(tw.measure().unwrap(), 20.0, "default: {:?}", tw);
+        assert_eq!(tw.measure().to_rate(), 2.5, "default: {:?}", tw);
     }
 
     #[test]
     fn long_time_shift() {
         use super::*;
 
-        let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), 16, ManualTimeSource::new());
+        let mut tw = RealTimeRunningAverage::with_time_source(Duration::from_secs(4), 16, ManualTimeSource::new());
 
-        tw.insert_now(10);
+        tw.insert(10);
         tw.time_source().time_shift(1_000_000_000.0);
-        tw.insert_now(10);
+        tw.insert(10);
         tw.time_source().time_shift(1.0);
-        tw.insert_now(10);
+        tw.insert(10);
         tw.time_source().time_shift(1.0);
-        tw.insert_now(10);
+        tw.insert(10);
         tw.time_source().time_shift(1.0);
-        tw.insert_now(10);
+        tw.insert(10);
 
-        assert_eq!(tw.measure_now().unwrap(), 40, "long: {:?}", tw);
-        assert_eq!(tw.measure_now().to_rate(), 10.0, "long: {:?}", tw);
+        assert_eq!(tw.measure().unwrap(), 40, "long: {:?}", tw);
+        assert_eq!(tw.measure().to_rate(), 10.0, "long: {:?}", tw);
     }
 
     #[test]
     fn measure_display() {
         use super::*;
 
-        let mut tw = RunningAverage::default();
+        let mut tw = RealTimeRunningAverage::default();
 
-        tw.insert_now(10);
-        tw.insert_now(10);
+        tw.insert(10);
+        tw.insert(10);
 
-        assert_eq!(&format!("{}", tw.measure_now()), "20 (2.50/s)");
+        assert_eq!(&format!("{}", tw.measure()), "20 (2.50/s)");
     }
 }
