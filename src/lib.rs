@@ -154,7 +154,7 @@ impl<V: Default, I: TimeInstant + Copy> RunningAverage<V, I> {
         }
     }
     
-    pub fn insert(&mut self, val: V, now: I) where V: AddAssign<V> {
+    pub fn insert(&mut self, now: I, val: V) where V: AddAssign<V> {
         self.shift(now);
         *self.window.front_mut().unwrap() += val;
     }
@@ -203,7 +203,7 @@ impl<V: Default, TS: TimeSource> RealTimeRunningAverage<V, TS> {
 
     pub fn insert(&mut self, val: V) where V: AddAssign<V> {
         let now = self.time_source.now();
-        self.inner.insert(val, now)
+        self.inner.insert(now, val)
     }
     
     /// Sum of window in duration
