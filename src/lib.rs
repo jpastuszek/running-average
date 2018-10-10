@@ -111,44 +111,45 @@ impl<T> Measure<T> {
 #[derive(Debug)]
 pub struct RunningAverage<V: Default, I: TimeInstant + Copy> {
     window: VecDeque<V>,
-    front: I,
+    front: Option<I>,
     duration: Duration,
 }
 
 impl<V: Default> Default for RunningAverage<V, Instant> {
     fn default() -> RunningAverage<V, Instant> {
-        RunningAverage::new(Instant::now(), Duration::from_secs(8))
+        RunningAverage::new(Duration::from_secs(8))
     }
 }
 
 impl<V: Default, I: TimeInstant + Copy> RunningAverage<V, I> {
-    pub fn new(now: I, duration: Duration) -> RunningAverage<V, I> {
-        RunningAverage::with_capacity(now, duration, 16)
+    pub fn new(duration: Duration) -> RunningAverage<V, I> {
+        RunningAverage::with_capacity(duration, 16)
     }
 
-    pub fn with_capacity(now: I, duration: Duration, capacity: usize) -> RunningAverage<V, I> {
+    pub fn with_capacity(duration: Duration, capacity: usize) -> RunningAverage<V, I> {
         assert!(capacity > 0, "RunningAverage capacity cannot be 0");
         RunningAverage {
             window: (0..capacity).map(|_| V::default()).collect(),
-            front: now,
+            front: None,
             duration: duration,
         }
     }
 
     fn shift(&mut self, now: I) {
+        let front = self.front.get_or_insert(now);
         let slot_duration = self.duration / self.window.len() as u32;
         let mut slots_to_go = self.window.len();
 
-        while now.duration_since(self.front) >= slot_duration {
+        while now.duration_since(*front) >= slot_duration {
             // Stop if we zeroed all slots or this can loop for long time if shift was not called recently
             if slots_to_go == 0 {
-                let since_front = now.duration_since(self.front);
-                self.front.forward(since_front);
+                let since_front = now.duration_since(*front);
+                front.forward(since_front);
                 break;
             }
             self.window.pop_back();
             self.window.push_front(V::default());
-            self.front.forward(slot_duration);
+            front.forward(slot_duration);
             slots_to_go -= 1;
         }
     }
@@ -181,12 +182,12 @@ impl<V: Default> Default for RealTimeRunningAverage<V, RealTimeSource> {
 }
 
 impl<V: Default> RealTimeRunningAverage<V, RealTimeSource> {
-    // Note: new() is parametrising output to RealTimeSource as this cannot be inferred from arguments
+    // Note: new() is parametrising output to RealTimeSource as this cannot be inferred otherwise
     pub fn new(duration: Duration) -> RealTimeRunningAverage<V, RealTimeSource> {
         let time_source = RealTimeSource;
 
         RealTimeRunningAverage {
-            inner: RunningAverage::new(time_source.now(), duration),
+            inner: RunningAverage::new(duration),
             time_source,
         }
     }
@@ -195,7 +196,7 @@ impl<V: Default> RealTimeRunningAverage<V, RealTimeSource> {
 impl<V: Default, TS: TimeSource> RealTimeRunningAverage<V, TS> {
     pub fn with_time_source(duration: Duration, capacity: usize, time_source: TS) -> RealTimeRunningAverage<V, TS> {
         RealTimeRunningAverage {
-            inner: RunningAverage::with_capacity(time_source.now(), duration, capacity),
+            inner: RunningAverage::with_capacity(duration, capacity),
             time_source,
         }
     }
