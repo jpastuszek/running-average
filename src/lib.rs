@@ -78,6 +78,30 @@ impl ManualTimeSource {
 }
 
 #[derive(Debug)]
+pub struct Measure<T> {
+    value: T, 
+    duration: Duration,
+}
+
+impl<T> Measure<T> {
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+
+    pub fn unwrap(self) -> T {
+        self.value
+    }
+
+    pub fn rate(&self) -> <T as ToRate>::Output where T: Clone + ToRate {
+        self.value.clone().to_rate(self.duration)
+    }
+
+    pub fn to_rate(self) -> <T as ToRate>::Output where T: ToRate {
+        self.value.to_rate(self.duration)
+    }
+}
+
+#[derive(Debug)]
 pub struct RunningAverage<V: Default, TS: TimeSource = RealTimeSource> {
     window: VecDeque<V>,
     front: TS::Instant,
@@ -111,8 +135,7 @@ impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
         }
     }
     
-    fn shift(&mut self) {
-        let now = self.time_source.now();
+    fn shift(&mut self, now: TS::Instant) {
         let slot_duration = self.duration / self.window.len() as u32;
 
         let mut slots_to_go = self.window.len();
@@ -130,20 +153,30 @@ impl<V: Default, TS: TimeSource> RunningAverage<V, TS> {
         }
     }
     
-    pub fn insert(&mut self, val: V) where V: AddAssign<V> {
-        self.shift();
+    pub fn insert_now(&mut self, val: V) where V: AddAssign<V> {
+        let now = self.time_source.now();
+        self.shift(now);
         *self.window.front_mut().unwrap() += val;
     }
     
-    /// Sum of window in duration
-    pub fn measure<'i>(&'i mut self) -> V where V: Sum<&'i V> {
-        self.shift();
-        self.window.iter().sum()
+    pub fn insert_at(&mut self, val: V, now: TS::Instant) where V: AddAssign<V> {
+        self.shift(now);
+        *self.window.front_mut().unwrap() += val;
     }
 
-    pub fn measure_per_second<'i>(&'i mut self) -> <V as ToRate>::Output where V: Sum<&'i V> + ToRate {
-        let ds = self.duration;
-        self.measure().to_rate(ds)
+    /// Sum of window in duration
+    pub fn measure_now<'i>(&'i mut self) -> Measure<V> where V: Sum<&'i V> {
+        let now = self.time_source.now();
+        self.measure(now)
+    }
+    
+    pub fn measure<'i>(&'i mut self, now: TS::Instant) -> Measure<V> where V: Sum<&'i V> {
+        self.shift(now);
+
+        Measure {
+            value: self.window.iter().sum(),
+            duration: self.duration,
+        }
     }
 
     pub fn time_source(&mut self) -> &mut TS {
@@ -176,16 +209,16 @@ mod tests {
         for capacity in 1..31 {
             let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), capacity, ManualTimeSource::new());
 
-            tw.insert(10);
+            tw.insert_now(10);
             tw.time_source().time_shift(1.0);
-            tw.insert(10);
+            tw.insert_now(10);
             tw.time_source().time_shift(1.0);
-            tw.insert(10);
+            tw.insert_now(10);
             tw.time_source().time_shift(1.0);
-            tw.insert(10);
+            tw.insert_now(10);
 
-            assert_eq!(tw.measure(), 40, "for capacity {}: {:?}", capacity, tw);
-            assert_eq!(tw.measure_per_second(), 10.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure_now().unwrap(), 40, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure_now().to_rate(), 10.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -196,14 +229,14 @@ mod tests {
         for capacity in 1..31 {
             let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), capacity, ManualTimeSource::new());
 
-            tw.insert(10);
+            tw.insert_now(10);
             tw.time_source().time_shift(1.0);
-            tw.insert(10);
+            tw.insert_now(10);
             tw.time_source().time_shift(1.0);
             tw.time_source().time_shift(1.0);
 
-            assert_eq!(tw.measure(), 20, "for capacity {}: {:?}", capacity, tw);
-            assert_eq!(tw.measure_per_second(), 5.0, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure_now().unwrap(), 20, "for capacity {}: {:?}", capacity, tw);
+            assert_eq!(tw.measure_now().to_rate(), 5.0, "for capacity {}: {:?}", capacity, tw);
         }
     }
 
@@ -213,12 +246,12 @@ mod tests {
 
         let mut tw = RunningAverage::default();
 
-        tw.insert(10);
-        tw.insert(10);
+        tw.insert_now(10);
+        tw.insert_now(10);
 
         // Note: this may fail as it is based on real time
-        assert_eq!(tw.measure(), 20, "default: {:?}", tw);
-        assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
+        assert_eq!(tw.measure_now().unwrap(), 20, "default: {:?}", tw);
+        assert_eq!(tw.measure_now().to_rate(), 2.5, "default: {:?}", tw);
     }
 
     #[test]
@@ -227,12 +260,12 @@ mod tests {
 
         let mut tw = RunningAverage::default();
 
-        tw.insert(10f64);
-        tw.insert(10.0);
+        tw.insert_now(10f64);
+        tw.insert_now(10.0);
 
         // Note: this may fail as it is based on real time
-        assert_eq!(tw.measure(), 20.0, "default: {:?}", tw);
-        assert_eq!(tw.measure_per_second(), 2.5, "default: {:?}", tw);
+        assert_eq!(tw.measure_now().unwrap(), 20.0, "default: {:?}", tw);
+        assert_eq!(tw.measure_now().to_rate(), 2.5, "default: {:?}", tw);
     }
 
     #[test]
@@ -241,17 +274,17 @@ mod tests {
 
         let mut tw = RunningAverage::with_time_source(Duration::from_secs(4), 16, ManualTimeSource::new());
 
-        tw.insert(10);
+        tw.insert_now(10);
         tw.time_source().time_shift(1_000_000_000.0);
-        tw.insert(10);
+        tw.insert_now(10);
         tw.time_source().time_shift(1.0);
-        tw.insert(10);
+        tw.insert_now(10);
         tw.time_source().time_shift(1.0);
-        tw.insert(10);
+        tw.insert_now(10);
         tw.time_source().time_shift(1.0);
-        tw.insert(10);
+        tw.insert_now(10);
 
-        assert_eq!(tw.measure(), 40, "long: {:?}", tw);
-        assert_eq!(tw.measure_per_second(), 10.0, "long: {:?}", tw);
+        assert_eq!(tw.measure_now().unwrap(), 40, "long: {:?}", tw);
+        assert_eq!(tw.measure_now().to_rate(), 10.0, "long: {:?}", tw);
     }
 }
