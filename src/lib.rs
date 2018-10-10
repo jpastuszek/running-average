@@ -333,6 +333,6 @@ mod tests {
         tw.insert(10);
         tw.insert(10);
 
-        assert_eq!(&format!("{}", tw.measure()), "20 (2.50/s)");
+        assert_eq!(&format!("{}", tw.measure()), "2.500");
     }
 }
