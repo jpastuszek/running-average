@@ -1,6 +1,6 @@
 [package]
 name = "running-average"
-version = "0.1.0"
+version = "0.1.1-alpha.0"
 authors = ["Jakub Pastuszek <jpastuszek@protonmail.com>"]
 description = "Calculate running average with specified time window width using constant memory"
 documentation = "https://docs.rs/running_average"
