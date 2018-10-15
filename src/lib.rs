@@ -1,4 +1,4 @@
-//! `RunningAverage` and `RealTimeRunningAverage` types allow to calculate running averages with specified time window width using constant memory.
+//! `RunningAverage` and `RealTimeRunningAverage` types allow to calculate running average with specified time window width using constant memory.
 //! 
 //! The `RunningAverage` type can be used when processing streams of temporal data while `RealTimeRunningAverage` can be used when measured events are happening in real time.
 //! 

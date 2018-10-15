@@ -1,6 +1,12 @@
 [package]
 name = "running-average"
 version = "0.1.0"
-authors = ["Jakub Pastuszek <jpastuszek@gmail.com>"]
+authors = ["Jakub Pastuszek <jpastuszek@protonmail.com>"]
+description = "Calculate running average with specified time window width using constant memory"
+documentation = "https://docs.rs/running_average"
+readme = "README.md"
+keywords = ["statistics", "performance", "metric"]
+license = "MIT"
+repository = "https://github.com/jpastuszek/running-average.git"
 
 [dependencies]
