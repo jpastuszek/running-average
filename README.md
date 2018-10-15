@@ -3,7 +3,7 @@ Rust crate that provides `RunningAverage` and `RealTimeRunningAverage` types tha
 The `RunningAverage` type can be used when processing streams of temporal data while `RealTimeRunningAverage` can be used when measured events are happening in real time.
 
 For example `RealTimeRunningAverage` can be used to measure download throughput by inserting how many bytes were transferred.
-```
+```rust
 use running_average::RealTimeRunningAverage;
 
 // By default use 8 second window with 16 accumulators
