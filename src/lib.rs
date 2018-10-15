@@ -1,8 +1,8 @@
-//! This crate provides `RunningAverage` and `RealTimeRunningAverage` types that allow to calculate running averages with specified time window width using constant memory.
+//! `RunningAverage` and `RealTimeRunningAverage` types allow to calculate running averages with specified time window width using constant memory.
 //! 
 //! The `RunningAverage` type can be used when processing streams of temporal data while `RealTimeRunningAverage` can be used when measured events are happening in real time.
 //! 
-//! For example `RealTimeRunningAverage` can be used to measure download throughput by inserting how many bytes were transfer.
+//! For example `RealTimeRunningAverage` can be used to measure download throughput by inserting how many bytes were transferred.
 //! ```
 //! use running_average::RealTimeRunningAverage;
 //! 
